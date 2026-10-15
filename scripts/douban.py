@@ -8,8 +8,7 @@ from notion_helper import NotionHelper
 from covers import CoverStore
 import utils
 
-DOUBAN_API_HOST = os.getenv("DOUBAN_API_HOST", "frodo.douban.com")
-DOUBAN_API_KEY = os.getenv("DOUBAN_API_KEY", "0ac44ae016490db2204ce0a042db2916")
+from douban_api import DOUBAN_API_HOST, DOUBAN_API_KEY, headers
 
 from config import movie_properties_type_dict,book_properties_type_dict, TAG_ICON_URL, USER_ICON_URL
 from utils import get_icon
@@ -31,15 +30,6 @@ book_status = {
     "doing": "在读",
     "done": "读过",
 }
-AUTH_TOKEN = os.getenv("AUTH_TOKEN")
-
-headers = {
-    "host": DOUBAN_API_HOST,
-    "authorization": f"Bearer {AUTH_TOKEN}" if AUTH_TOKEN else "",
-    "user-agent": "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.16(0x18001023) NetType/WIFI Language/zh_CN",
-    "referer": "https://servicewechat.com/wx2f9b06c1de1ccfca/84/page-frame.html",
-}
-
 @retry(stop_max_attempt_number=3, wait_fixed=5000)
 def fetch_interests_page(url, params):
     response = requests.get(url, headers=headers, params=params, timeout=(10, 30))
@@ -165,7 +155,7 @@ def insert_movie():
                 "database_id": notion_helper.movie_database_id,
                 "type": "database_id",
             }
-            properties["封面"], icon = covers.new_cover(cover)
+            properties["封面"], icon = covers.new_cover(cover, movie["豆瓣链接"])
             notion_helper.create_page(parent=parent, properties=properties, icon=icon)
 
 
@@ -248,7 +238,7 @@ def insert_book():
                 "database_id": notion_helper.book_database_id,
                 "type": "database_id",
             }
-            properties["封面"], icon = covers.new_cover(cover)
+            properties["封面"], icon = covers.new_cover(cover, book["豆瓣链接"])
             notion_helper.create_page(parent=parent, properties=properties, icon=icon)
 
 

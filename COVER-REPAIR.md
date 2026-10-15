@@ -3,6 +3,9 @@
 New movie and book records upload the actual image to Notion. The same upload is
 used by the `封面` property and page icon. HTML challenges and CDN error bodies
 are rejected, including HTTP 200 responses. Existing non-Douban images are kept.
+If an old image has been removed, the uploader requests current metadata for
+the record's exact Douban subject ID and validates that ID before trying its
+current large/normal cover. It never substitutes an image from another work.
 
 For existing records, run **repair Notion covers** with `limit=1`, inspect both
 canary pages in Notion, then run with `limit=0`. The job backs up selected pages,
