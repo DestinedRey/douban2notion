@@ -25,6 +25,7 @@ class MovieActorsTest(unittest.TestCase):
         }
         with patch.object(douban, "notion_helper", helper, create=True), \
              patch.object(douban, "douban_name", "test-user", create=True), \
+             patch.object(douban.CoverStore, "new_cover", return_value=({"files": []}, None)), \
              patch.object(douban, "fetch_subjects", side_effect=[[entry], [], []]):
             douban.insert_movie()
         return helper
