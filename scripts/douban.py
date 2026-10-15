@@ -40,11 +40,19 @@ headers = {
 }
 
 @retry(stop_max_attempt_number=3, wait_fixed=5000)
+def fetch_interests_page(url, params):
+    response = requests.get(url, headers=headers, params=params, timeout=(10, 30))
+    response.raise_for_status()
+    interests = response.json().get("interests")
+    if not isinstance(interests, list):
+        raise ValueError("Douban response is missing the interests list")
+    return interests
+
+
 def fetch_subjects(user, type_, status):
     offset = 0
     page = 0
     url = f"https://{DOUBAN_API_HOST}/api/v2/user/{user}/interests"
-    total = 0
     results = []
     while True:
         params = {
@@ -54,18 +62,13 @@ def fetch_subjects(user, type_, status):
             "start": offset,
             "apiKey": DOUBAN_API_KEY,
         }
-        response = requests.get(url, headers=headers, params=params)
-        
-        if response.ok:
-            response = response.json()
-            interests = response.get("interests")
-            if len(interests)==0:
-                break
-            results.extend(interests)
-            print(f"total = {total}")
-            print(f"size = {len(results)}")
-            page += 1
-            offset = page * 50
+        interests = fetch_interests_page(url, params)
+        if not interests:
+            break
+        results.extend(interests)
+        print(f"size = {len(results)}")
+        page += 1
+        offset = page * 50
     return results
 
 
