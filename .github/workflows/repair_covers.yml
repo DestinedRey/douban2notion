@@ -1,0 +1,64 @@
+name: repair Notion covers
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Maximum pages per library; 1 for canary, 0 for all'
+        required: true
+        default: '1'
+
+permissions:
+  contents: read
+concurrency:
+  group: douban-sync-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [movie, book]
+    env:
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      MOVIE_NOTION_TOKEN: ${{ secrets.MOVIE_NOTION_TOKEN }}
+      BOOK_NOTION_TOKEN: ${{ secrets.BOOK_NOTION_TOKEN }}
+      NOTION_MOVIE_URL: ${{ secrets.NOTION_MOVIE_URL }}
+      NOTION_BOOK_URL: ${{ secrets.NOTION_BOOK_URL }}
+      REPAIR_LIMIT: ${{ inputs.limit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt cryptography==50.0.2
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Back up and verify isolated restore
+        run: python -u scripts/repair_covers.py prepare ${{ matrix.kind }} --limit "$REPAIR_LIMIT"
+      - name: Persist encrypted backup before mutation
+        uses: actions/upload-artifact@v4
+        with:
+          name: covers-${{ matrix.kind }}-before-${{ github.run_id }}
+          path: cover-repair/*-before.enc
+          if-no-files-found: error
+          retention-days: 90
+      - name: Repair and verify
+        run: python -u scripts/repair_covers.py apply ${{ matrix.kind }}
+      - name: Persist verification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: covers-${{ matrix.kind }}-result-${{ github.run_id }}
+          path: |
+            cover-repair/*-result.enc
+            cover-repair/*-summary.json
+          if-no-files-found: warn
+          retention-days: 90

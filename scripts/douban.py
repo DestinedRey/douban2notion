@@ -5,6 +5,7 @@ import pendulum
 from retrying import retry
 import requests
 from notion_helper import NotionHelper
+from covers import CoverStore
 import utils
 
 DOUBAN_API_HOST = os.getenv("DOUBAN_API_HOST", "frodo.douban.com")
@@ -74,6 +75,7 @@ def fetch_subjects(user, type_, status):
 
 
 def insert_movie():
+    covers = CoverStore(notion_helper.client)
     actor_property_type = notion_helper.get_property_type(
         notion_helper.movie_database_id, "演员"
     )
@@ -163,12 +165,12 @@ def insert_movie():
                 "database_id": notion_helper.movie_database_id,
                 "type": "database_id",
             }
-            notion_helper.create_page(
-                parent=parent, properties=properties, icon=get_icon(cover)
-            )
+            properties["封面"], icon = covers.new_cover(cover)
+            notion_helper.create_page(parent=parent, properties=properties, icon=icon)
 
 
 def insert_book():
+    covers = CoverStore(notion_helper.client)
     notion_books = notion_helper.query_all(database_id=notion_helper.book_database_id)
     notion_book_dict = {}
     for i in notion_books:
@@ -246,9 +248,8 @@ def insert_book():
                 "database_id": notion_helper.book_database_id,
                 "type": "database_id",
             }
-            notion_helper.create_page(
-                parent=parent, properties=properties, icon=get_icon(cover)
-            )
+            properties["封面"], icon = covers.new_cover(cover)
+            notion_helper.create_page(parent=parent, properties=properties, icon=icon)
 
 
 if __name__ == "__main__":
