@@ -41,24 +41,43 @@ jobs:
         run: pip install -r requirements.txt cryptography==50.0.2
       - name: Test
         run: python -m unittest discover -s tests -v
-      - name: Back up and verify isolated restore
-        run: python -u scripts/repair_covers.py prepare ${{ matrix.kind }} --limit "$REPAIR_LIMIT"
-      - name: Persist encrypted backup before mutation
-        uses: actions/upload-artifact@v4
-        with:
-          name: covers-${{ matrix.kind }}-before-${{ github.run_id }}
-          path: cover-repair/*-before.enc
-          if-no-files-found: error
-          retention-days: 90
-      - name: Repair and verify
-        run: python -u scripts/repair_covers.py apply ${{ matrix.kind }}
-      - name: Persist verification receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: covers-${{ matrix.kind }}-result-${{ github.run_id }}
-          path: |
-            cover-repair/*-result.enc
-            cover-repair/*-summary.json
-          if-no-files-found: warn
-          retention-days: 90
+      - name: Diagnose remaining image sources (read only)
+        run: |
+          python -u - <<'PY'
+          import sys, json, requests, re
+          sys.path.insert(0, 'scripts')
+          from notion_helper import NotionHelper
+          from covers import external_douban_url, IMAGE_HEADERS
+          from douban import headers, DOUBAN_API_HOST, DOUBAN_API_KEY
+          kind = '${{ matrix.kind }}'
+          helper = NotionHelper(kind)
+          rows = helper.query_all(getattr(helper, kind + '_database_id'))
+          rows.sort(key=lambda p:p.get('created_time',''), reverse=True)
+          count = 0
+          for page in rows:
+              files = page.get('properties', {}).get('封面', {}).get('files', [])
+              urls = [external_douban_url(f) for f in files]
+              urls = [u for u in urls if u]
+              if not urls: continue
+              subject = page.get('properties', {}).get('豆瓣链接', {}).get('url', '')
+              result = {'page_id': page['id'], 'kind': kind, 'source': urls[0]}
+              try:
+                  r = requests.get(urls[0], headers=IMAGE_HEADERS, timeout=(10,30))
+                  result.update(status=r.status_code, mime=r.headers.get('Content-Type'), signature=r.content[:16].hex())
+                  if r.status_code != 200 or not r.content.startswith(b'\xff\xd8'):
+                      sid = re.search(r'/subject/(\d+)', subject).group(1)
+                      r = requests.get(f'https://{DOUBAN_API_HOST}/api/v2/{kind}/{sid}',headers=headers,params={'apiKey':DOUBAN_API_KEY},timeout=(10,30))
+                      result['metadata_status'] = r.status_code
+                      if r.ok:
+                          pic=r.json().get('pic', {})
+                          result['current_pic']=pic
+                          u=pic.get('large')
+                          if u:
+                              rr=requests.get(u,headers=IMAGE_HEADERS,timeout=(10,30))
+                              result['current_status']=rr.status_code
+                              result['current_signature']=rr.content[:16].hex()
+              except Exception as exc: result['error']=type(exc).__name__
+              print(json.dumps(result),flush=True)
+              count+=1
+              if count>=6: break
+          PY
