@@ -50,6 +50,12 @@ class NotionCompatibilityTest(unittest.TestCase):
             self.assertEqual(request.headers["Notion-Version"], "2022-06-28")
         self.assertEqual(json.loads(self.requests[1].content)["start_cursor"], "next")
 
+    def test_actor_type_is_read_from_current_database(self):
+        self.responses = [{"properties": {"演员": {"type": "rich_text"}}}]
+        self.assertEqual(self.helper.get_property_type("test-movies", "演员"), "rich_text")
+        self.assertEqual(self.requests[0].method, "GET")
+        self.assertEqual(self.requests[0].url.path, "/v1/databases/test-movies")
+
     def test_existing_relation_is_reused_without_creating_a_page(self):
         self.responses = [{"results": [{"id": "existing-relation"}]}]
         relation = self.helper.get_relation_id("2026", "test-years", None)

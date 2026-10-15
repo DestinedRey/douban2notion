@@ -74,6 +74,19 @@ def get_multi_select(names):
     return {"multi_select": [{"name": name} for name in names]}
 
 
+def get_actor_property(names, property_type):
+    """Text avoids growing the database schema for every new actor."""
+    if property_type == MULTI_SELECT:
+        return get_multi_select(names)
+    if property_type != RICH_TEXT:
+        raise ValueError("演员 property must be rich_text or multi_select")
+    content = ",".join(names)
+    chunks = [content[i:i + MAX_LENGTH] for i in range(0, len(content), MAX_LENGTH)]
+    if len(chunks) > 100:
+        raise ValueError("Actor names exceed Notion's rich text array limit")
+    return {"rich_text": [{"type": "text", "text": {"content": chunk}} for chunk in chunks]}
+
+
 def get_relation(ids):
     return {"relation": [{"id": id} for id in ids]}
 

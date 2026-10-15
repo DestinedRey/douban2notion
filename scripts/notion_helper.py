@@ -218,6 +218,11 @@ class NotionHelper:
         return self.client.databases.query(**kwargs)
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
+    def get_property_type(self, database_id, property_name):
+        database = self.client.databases.retrieve(database_id=database_id)
+        return database.get("properties", {}).get(property_name, {}).get("type")
+
+    @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def get_block_children(self, id):
         response = self.client.blocks.children.list(id)
         return response.get("results")

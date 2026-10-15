@@ -71,6 +71,11 @@ def fetch_subjects(user, type_, status):
 
 
 def insert_movie():
+    actor_property_type = notion_helper.get_property_type(
+        notion_helper.movie_database_id, "演员"
+    )
+    if actor_property_type not in ("rich_text", "multi_select"):
+        raise ValueError("演员 property must be rich_text or multi_select")
     notion_movies = notion_helper.query_all(database_id=notion_helper.movie_database_id)
     notion_movie_dict = {}
     for i in notion_movies:
@@ -148,6 +153,8 @@ def insert_movie():
                     for x in subject.get("directors")[0:100]
                 ]
             properties = utils.get_properties(movie, movie_properties_type_dict)
+            if "演员" in movie:
+                properties["演员"] = utils.get_actor_property(movie["演员"], actor_property_type)
             notion_helper.get_date_relation(properties,create_time)
             parent = {
                 "database_id": notion_helper.movie_database_id,
