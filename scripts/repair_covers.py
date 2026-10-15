@@ -104,7 +104,7 @@ def apply(helper, kind, folder):
             # Do not log HTTP bodies, signed URLs or page contents.
             results.append({"id": before["id"], "status": "failed", "error": type(exc).__name__})
             print(json.dumps({"stage": "error", "kind": kind, "index": index,
-                              "error": type(exc).__name__, "http_status": getattr(exc, "status", None),
+                              "error": type(exc).__name__, "http_status": getattr(exc, "status", None) or getattr(getattr(exc, "response", None), "status_code", None),
                               "detail": str(exc)[:150] if isinstance(exc, (ValueError, RuntimeError)) else ""}), flush=True)
         if index % 10 == 0 or index == len(backup["rows"]):
             print(json.dumps({"stage": "progress", "kind": kind, "completed": index,

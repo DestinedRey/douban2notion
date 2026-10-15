@@ -5,10 +5,11 @@ import unittest
 from unittest.mock import Mock, patch
 
 import httpx
+import requests
 from notion_client import Client
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from covers import CoverStore, download_cover, external_douban_url, image_type
+from covers import CoverStore, current_cover_urls, download_cover, external_douban_url, image_type
 
 
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 100 + b"\xff\xd9"
@@ -71,6 +72,49 @@ class CoverTest(unittest.TestCase):
     def test_native_images_are_skipped(self):
         store = CoverStore(Mock())
         self.assertEqual(store.repair_payload({"properties": {"封面": {"files": [{"type": "file", "file": {"url": "https://notion.so/file"}}]}}, "icon": {"type": "emoji", "emoji": "🎬"}}), {})
+
+    def test_removed_cover_uses_same_subject_and_reuses_upload(self):
+        store = CoverStore(Mock())
+        store.session = Mock()
+        store.client.file_uploads.create.return_value = {"id": "replacement"}
+        store.client.file_uploads.send.return_value = {"status": "uploaded"}
+        replacement = URL.replace("example", "current")
+        normal = URL.replace("example", "normal")
+        store.session.get.return_value.json.return_value = {"id": "123", "pic": {"large": replacement, "normal": normal}}
+        external = {"type": "external", "external": {"url": URL}}
+        page = {"properties": {"封面": {"files": [external]}, "豆瓣链接": {"url": "https://movie.douban.com/subject/123/"}}, "icon": external}
+        with patch("covers.download_cover", side_effect=[requests.HTTPError(), ValueError("CDN error"), (JPEG, "image/jpeg", ".jpg")]) as download, patch("covers.time.sleep"):
+            payload = store.repair_payload(page)
+        self.assertEqual([c.args[0] for c in download.call_args_list], [URL, replacement, normal])
+        self.assertEqual(payload["properties"]["封面"]["files"][0]["file_upload"], payload["icon"]["file_upload"])
+        store.client.file_uploads.create.assert_called_once()
+        self.assertTrue(store.session.get.call_args.args[0].endswith("/movie/123"))
+
+    def test_wrong_subject_metadata_stops_before_upload(self):
+        store = CoverStore(Mock())
+        store.session = Mock()
+        store.session.get.return_value.json.return_value = {"id": "999", "pic": {"large": URL}}
+        with patch("covers.download_cover", side_effect=requests.HTTPError()), self.assertRaisesRegex(ValueError, "different Douban subject"):
+            store.new_cover(URL, "https://book.douban.com/subject/123/")
+        store.client.file_uploads.create.assert_not_called()
+
+    def test_invalid_subject_and_non_douban_replacement_are_rejected(self):
+        session = Mock()
+        for subject in ("https://evil.invalid/subject/123/", "http://movie.douban.com/subject/123/", "https://movie.douban.com/people/123/"):
+            with self.assertRaises(ValueError):
+                current_cover_urls(subject, session)
+        session.get.assert_not_called()
+        session.get.return_value.json.return_value = {"id": "123", "pic": {"large": "https://evil.invalid/image.jpg"}}
+        with self.assertRaises(ValueError):
+            current_cover_urls("https://book.douban.com/subject/123/", session)
+
+    def test_missing_images_never_create_an_upload(self):
+        store = CoverStore(Mock())
+        store.session = Mock()
+        store.session.get.return_value.json.return_value = {"id": "123", "pic": {"large": URL}}
+        with patch("covers.download_cover", side_effect=ValueError("CDN error")), self.assertRaisesRegex(ValueError, "unavailable"):
+            store.new_cover(URL, "https://movie.douban.com/subject/123/")
+        store.client.file_uploads.create.assert_not_called()
 
 
 if __name__ == "__main__":
